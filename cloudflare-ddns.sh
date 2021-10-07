@@ -1,5 +1,5 @@
-#!/bin/bash
-## change to "bin/sh" when necessary
+#!/bin/sh
+## change to "bin/bash" when necessary
 
 if [[ $# -ne 1 ]]; then
     echo "Usage: $0 cloudflare_domain.config" >&2
