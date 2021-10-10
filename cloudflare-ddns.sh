@@ -38,13 +38,15 @@ update_record() {
   ###########################################
 
   logger "DDNS Updater: Check Initiated"
-  record=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_identifier/dns_records?name=$record_name" -H "X-Auth-Email: $auth_email" -H "$auth_header $auth_key" -H "Content-Type: application/json")
+  echo "DDNS Updater: Check Initiated"
+  record=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_identifier/dns_records?name=$record_name&order=type&direction=asc" -H "X-Auth-Email: $auth_email" -H "$auth_header $auth_key" -H "Content-Type: application/json")
 
   ###########################################
   ## Check if the domain has an A record
   ###########################################
   if [[ $record == *"\"count\":0"* ]]; then
     logger -s "DDNS Updater: Record does not exist, perhaps create one first? (${ip} for ${record_name})"
+    echo "DDNS Updater: Record does not exist, perhaps create one first? (${ip} for ${record_name})"
     return 1
   fi
 
@@ -55,13 +57,16 @@ update_record() {
   # Compare if they're the same
   if [[ $ip == $old_ip ]]; then
     logger "DDNS Updater: IP ($ip) for ${record_name} has not changed."
+    echo "DDNS Updater: IP ($ip) for ${record_name} has not changed."
     return 0
   fi
 
   ###########################################
   ## Set the record identifier from result
   ###########################################
-  record_identifier=$(echo "$record" | sed -E 's/.*"id":"(\w+)".*/\1/')
+  # https://api.cloudflare.com/#getting-started-requests
+  # 
+  record_identifier=$(echo "$record" | jq '.result[] | select(.type=="A")' | jq '.id' | sed 's/\"//g')
 
   ###########################################
   ## Change the IP@Cloudflare using the API
@@ -75,12 +80,15 @@ update_record() {
   ###########################################
   ## Report the status
   ###########################################
+  echo "Update result: $update"
   case "$update" in
-  *"\"success\":false"*)
-    logger -s "DDNS Updater: $ip $record_name DDNS failed for $record_identifier ($ip). DUMPING RESULTS:\n$update"
+  *"\"success\":true"*)
     return 1;;
-  *)
     logger "DDNS Updater: $ip $record_name DDNS updated."
+    echo "DDNS Updater: $ip $record_name DDNS updated."
+  *)
+    logger -s "DDNS Updater: $ip $record_name DDNS failed for $record_identifier ($ip). DUMPING RESULTS:\n$update"
+    echo "DDNS Updater: $ip $record_name DDNS failed for $record_identifier ($ip). DUMPING RESULTS:\n$update"
     return 0;;
   esac
 
@@ -93,6 +101,7 @@ ip=$(curl -s https://api.ipify.org || curl -s https://ipv4.icanhazip.com/)
 
 if [ "${ip}" == "" ]; then 
   logger -s "DDNS Updater: No public IP found"
+  echo "DDNS Updater: No public IP found"
   exit 1
 fi
 
